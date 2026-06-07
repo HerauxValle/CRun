@@ -1,0 +1,21 @@
+[package]
+name = "crun"
+version = "1.1.14"
+edition = "2021"
+description = "Run C-family source files like scripts — compile, execute, clean up."
+
+[[bin]]
+name = "crun"
+path = "src/main.rs"
+
+[dependencies]
+# clap: industry-standard arg parser. derive feature lets us use #[derive(Parser)]
+# which is cleaner than manual matching and gives --help for free.
+clap = { version = "4", features = ["derive"] }
+
+# rand: used in cleanup.rs to generate the 16-char random tmp dir name.
+rand = "0.8"
+
+# which: resolves compiler binaries (gcc, g++, dotnet, etc.) from PATH at runtime.
+# Avoids hardcoding /usr/bin/gcc etc. — works across distros and custom installs.
+which = "4"
