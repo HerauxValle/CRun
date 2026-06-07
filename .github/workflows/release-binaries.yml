@@ -1,0 +1,79 @@
+name: Release prebuilt binaries
+
+# Builds crun on real native runners for Linux (musl static), Windows, and
+# macOS, and attaches each binary + a built-on.json compatibility fingerprint
+# to the GitHub Release for the pushed tag. This complements the tracked
+# bin/crun (built on whatever machine ran install.sh) by providing binaries
+# for platforms the maintainer doesn't own — no cross-compilation involved,
+# every build runs on its target OS.
+#
+# Trigger: push a tag matching the version pattern used by gitpushall.py
+# (e.g. 1.2.3). Runs on GitHub's cloud runners — does not touch your machine.
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            bin_name: crun
+            asset_name: crun-linux-x86_64
+            built_os: linux
+            libc: musl
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin_name: crun.exe
+            asset_name: crun-windows-x86_64.exe
+            built_os: windows
+            libc: msvc
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bin_name: crun
+            asset_name: crun-macos-aarch64
+            built_os: macos
+            libc: none
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Install musl tools (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Stage artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" "dist/${{ matrix.asset_name }}"
+          arch="$(echo '${{ matrix.target }}' | cut -d- -f1)"
+          cat > "dist/${{ matrix.asset_name }}.built-on.json" <<EOF
+          {
+            "os": "${{ matrix.built_os }}",
+            "arch": "$arch",
+            "libc": "${{ matrix.libc }}",
+            "libc_version": ""
+          }
+          EOF
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/${{ matrix.asset_name }}
+            dist/${{ matrix.asset_name }}.built-on.json
